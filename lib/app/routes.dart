@@ -90,7 +90,13 @@ GoRouter buildRouter(AuthProvider authProvider) {
       ),
       GoRoute(
         path: AppRoutes.newPayment,
-        builder: (context, state) => const PaymentFormScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return PaymentFormScreen(
+            initialName: extra?['name'] as String?,
+            initialAmount: extra?['amount'] as double?,
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.paymentDetail,

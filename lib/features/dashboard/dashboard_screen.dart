@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
+import '../../core/services/ocr_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/loading_widget.dart';
@@ -26,20 +28,75 @@ class DashboardScreen extends StatelessWidget {
     return 'Buenas noches 👋';
   }
 
-  void _showComingSoon(BuildContext context, String feature) {
+  /// Toma una foto con la cámara, la analiza con OCR en el dispositivo
+  /// (Google ML Kit, sin costo ni conexión a internet) y, si logra
+  /// detectar un monto o un nombre probable, abre el formulario de "Agregar
+  /// pago" con esos datos precargados para que el usuario los revise y
+  /// corrija antes de guardar.
+  Future<void> _scanInvoice(BuildContext context) async {
+    XFile? photo;
+    try {
+      photo = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se pudo abrir la cámara. Revisa el permiso de cámara de la app.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (photo == null) return;
+    if (!context.mounted) return;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(feature),
-        content: const Text('Esta función estará disponible en Premium próximamente.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Entendido'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(child: Text('Leyendo la factura...')),
+          ],
+        ),
       ),
+    );
+
+    ScanResult? result;
+    try {
+      result = await OcrService.instance.scanImage(photo.path);
+    } catch (_) {
+      result = null;
+    }
+
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (result == null || (result.name == null && result.amount == null)) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No se detectó texto claro en la foto. Puedes ingresar los datos manualmente.',
+          ),
+        ),
+      );
+    }
+
+    if (!context.mounted) return;
+    context.push(
+      AppRoutes.newPayment,
+      extra: {
+        if (result?.name != null) 'name': result!.name,
+        if (result?.amount != null) 'amount': result!.amount,
+      },
     );
   }
 
@@ -99,7 +156,7 @@ class DashboardScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: () => _showComingSoon(context, 'Escanear factura'),
+                      onPressed: () => _scanInvoice(context),
                       icon: const Icon(Icons.document_scanner_outlined),
                       label: const Text('Escanear factura'),
                     ),

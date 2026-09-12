@@ -15,7 +15,17 @@ import '../../providers/settings_provider.dart';
 class PaymentFormScreen extends StatefulWidget {
   final Payment? existingPayment;
 
-  const PaymentFormScreen({super.key, this.existingPayment});
+  /// Valores detectados automáticamente por el escáner OCR de facturas
+  /// (solo aplican cuando se crea un pago nuevo, no al editar uno existente).
+  final String? initialName;
+  final double? initialAmount;
+
+  const PaymentFormScreen({
+    super.key,
+    this.existingPayment,
+    this.initialName,
+    this.initialAmount,
+  });
 
   @override
   State<PaymentFormScreen> createState() => _PaymentFormScreenState();
@@ -36,6 +46,9 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
   bool _isSaving = false;
 
   bool get _isEditing => widget.existingPayment != null;
+
+  bool get _isFromScanner =>
+      !_isEditing && (widget.initialName != null || widget.initialAmount != null);
 
   @override
   void initState() {
@@ -62,6 +75,15 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
       _isRecurring = false;
       _frequency = PaymentFrequency.mensual;
       _reminder = ReminderOption.oneDayBefore;
+
+      if (widget.initialName != null) {
+        _nameController.text = widget.initialName!;
+      }
+      if (widget.initialAmount != null) {
+        _amountController.text = widget.initialAmount!.toStringAsFixed(
+          _currency.code == 'USD' ? 2 : 0,
+        );
+      }
     }
   }
 
@@ -163,6 +185,36 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (_isFromScanner) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.document_scanner_outlined,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Detectado automáticamente desde la foto. '
+                            'Revisa los datos antes de guardar.',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 TextFormField(
                   controller: _nameController,
                   textCapitalization: TextCapitalization.sentences,
