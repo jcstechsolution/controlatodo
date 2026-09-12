@@ -1,0 +1,37 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Un usuario únicamente puede leer, crear, modificar y eliminar
+    // información dentro de su propio documento users/{userId}.
+    // Nunca se permite el acceso a datos de otro usuario.
+    match /users/{userId} {
+      allow read, create, update, delete: if request.auth != null
+        && request.auth.uid == userId;
+
+      // users/{userId}/payments/{paymentId}
+      match /payments/{paymentId} {
+        allow read, create, update, delete: if request.auth != null
+          && request.auth.uid == userId;
+
+        // users/{userId}/payments/{paymentId}/history/{historyId}
+        match /history/{historyId} {
+          allow read, create, update, delete: if request.auth != null
+            && request.auth.uid == userId;
+        }
+      }
+
+      // users/{userId}/settings/config
+      match /settings/{settingId} {
+        allow read, create, update, delete: if request.auth != null
+          && request.auth.uid == userId;
+      }
+    }
+
+    // Cualquier otra ruta queda denegada por defecto.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
