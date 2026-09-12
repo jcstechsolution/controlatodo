@@ -22,12 +22,19 @@ enum PaymentSort { dueDateAsc, amountDesc, amountAsc, name }
 class PaymentProvider extends ChangeNotifier {
   final PaymentRepository _repository;
   StreamSubscription<List<Payment>>? _subscription;
+  StreamSubscription<List<PaymentHistoryEntry>>? _historySubscription;
   String? _uid;
 
   PaymentProvider({PaymentRepository? repository})
       : _repository = repository ?? PaymentRepository();
 
   List<Payment> _allPayments = [];
+
+  /// Historial de TODOS los pagos del usuario (de todas las subcolecciones
+  /// `history`), usado para que las estadísticas de "pagado" sean
+  /// históricamente correctas en vez de depender del estado actual de cada
+  /// `Payment`. Ver `PaymentRepository.watchAllHistory`.
+  List<PaymentHistoryEntry> _allHistory = [];
   bool isLoading = true;
   String? errorMessage;
 
@@ -36,6 +43,8 @@ class PaymentProvider extends ChangeNotifier {
   String searchQuery = '';
 
   List<Payment> get allPayments => List.unmodifiable(_allPayments);
+
+  List<PaymentHistoryEntry> get allHistory => List.unmodifiable(_allHistory);
 
   int get totalCount => _allPayments.length;
 
@@ -48,8 +57,10 @@ class PaymentProvider extends ChangeNotifier {
     if (_uid == uid) return;
     _uid = uid;
     _subscription?.cancel();
+    _historySubscription?.cancel();
     if (uid == null) {
       _allPayments = [];
+      _allHistory = [];
       isLoading = false;
       notifyListeners();
       return;
@@ -65,6 +76,23 @@ class PaymentProvider extends ChangeNotifier {
       errorMessage = AppException.generic.message;
       isLoading = false;
       notifyListeners();
+    });
+    _historySubscription = _repository.watchAllHistory(uid).listen((history) {
+      _allHistory = history;
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[HISTORY] ${history.length} registro(s) recibido(s) para uid=$uid: '
+            '${history.map((h) => '${h.name ?? h.paymentId}:${h.amount}${h.currency}@${h.paidAt}').toList()}');
+      }
+      notifyListeners();
+    }, onError: (Object e) {
+      // Si la consulta de historial completo falla (por ejemplo, porque
+      // falta crear el índice de Firestore la primera vez), no se rompe el
+      // resto de la app: solo quedan sin datos las estadísticas históricas.
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[HISTORY] error en watchAllHistory: $e');
+      }
     });
   }
 
@@ -146,12 +174,20 @@ class PaymentProvider extends ChangeNotifier {
           p.dueDate.month == now.month,
     );
 
-    double paid = 0;
+    // "Pagado" se calcula desde el historial real (no desde el Payment
+    // activo): un pago recurrente vuelve a "pendiente" y avanza su
+    // `dueDate` en cuanto se paga, así que el único registro confiable de
+    // "esto se pagó este mes" es `PaymentHistoryEntry`.
+    final paid = PaymentUtils.paidTotal(
+      _allHistory,
+      currency: primaryCurrency,
+      year: now.year,
+      month: now.month,
+    );
+
     double pending = 0;
     for (final p in inMonth) {
-      if (p.statusEnum == PaymentStatus.paid) {
-        paid += p.amount;
-      } else {
+      if (p.statusEnum != PaymentStatus.paid) {
         pending += p.amount;
       }
     }
@@ -170,10 +206,24 @@ class PaymentProvider extends ChangeNotifier {
     );
   }
 
+  /// Suma mensualizada de las obligaciones recurrentes activas en [currency]
+  /// (ej. ₡98.400/mes). Ver `PaymentUtils.recurringMonthlyTotal`.
+  double recurringMonthlyTotalFor(String currency) {
+    final inCurrency = _allPayments.where((p) => p.currency == currency).toList();
+    return PaymentUtils.recurringMonthlyTotal(inCurrency);
+  }
+
+  /// Igual que [recurringMonthlyTotalFor] pero anualizado (ej. ≈ ₡1.180.800/año).
+  double recurringAnnualTotalFor(String currency) {
+    final inCurrency = _allPayments.where((p) => p.currency == currency).toList();
+    return PaymentUtils.recurringAnnualTotal(inCurrency);
+  }
+
   Future<bool> addPayment({
     required String uid,
     required bool isPremium,
     required String name,
+    String? provider,
     required String category,
     required double amount,
     required String currency,
@@ -182,6 +232,8 @@ class PaymentProvider extends ChangeNotifier {
     required String frequency,
     required int reminderDays,
     String? notes,
+    String? invoiceNumber,
+    String? documentUrl,
   }) async {
     if (!canAddMore(isPremium)) {
       errorMessage =
@@ -193,6 +245,7 @@ class PaymentProvider extends ChangeNotifier {
       await _repository.createPayment(
         uid: uid,
         name: name,
+        provider: provider,
         category: category,
         amount: amount,
         currency: currency,
@@ -201,6 +254,8 @@ class PaymentProvider extends ChangeNotifier {
         frequency: frequency,
         reminderDays: reminderDays,
         notes: notes,
+        invoiceNumber: invoiceNumber,
+        documentUrl: documentUrl,
       );
     });
   }
@@ -262,6 +317,7 @@ class PaymentProvider extends ChangeNotifier {
   @override
   void dispose() {
     _subscription?.cancel();
+    _historySubscription?.cancel();
     super.dispose();
   }
 }

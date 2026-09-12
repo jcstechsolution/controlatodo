@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
 import '../constants/payment_enums.dart';
+import '../../models/payment_history_model.dart';
+import '../../models/payment_model.dart';
+import 'date_formatter.dart';
 
 /// Cálculos y reglas de negocio compartidas relacionadas con pagos.
 class PaymentUtils {
@@ -35,13 +38,81 @@ class PaymentUtils {
     return DateTime(year, month, day);
   }
 
+  /// Cuántas veces al año ocurre un pago con esta frecuencia. Se usa para
+  /// normalizar montos recurrentes a "por mes"/"por año" sin importar cada
+  /// cuánto se cobran realmente.
+  static int occurrencesPerYear(PaymentFrequency frequency) {
+    switch (frequency) {
+      case PaymentFrequency.unaVez:
+        return 0;
+      case PaymentFrequency.semanal:
+        return 52;
+      case PaymentFrequency.mensual:
+        return 12;
+      case PaymentFrequency.trimestral:
+        return 4;
+      case PaymentFrequency.semestral:
+        return 2;
+      case PaymentFrequency.anual:
+        return 1;
+    }
+  }
+
+  /// Costo anualizado de un pago recurrente (monto × veces al año). Para un
+  /// pago no recurrente devuelve 0 (no aplica el concepto de "por año").
+  static double annualEquivalent(Payment payment) {
+    if (!payment.isRecurring) return 0;
+    return payment.amount * occurrencesPerYear(payment.frequencyEnum);
+  }
+
+  /// Costo mensualizado de un pago recurrente (costo anualizado ÷ 12). Ej.:
+  /// una obligación mensual de ₡5.500 -> 5500/mes, ≈ 66000/año.
+  static double monthlyEquivalent(Payment payment) {
+    return annualEquivalent(payment) / 12;
+  }
+
+  /// Suma el costo mensualizado de una lista de pagos recurrentes. Se asume
+  /// que [payments] ya viene filtrada por una sola moneda (nunca se deben
+  /// sumar montos de monedas distintas sin una tasa de cambio real).
+  static double recurringMonthlyTotal(List<Payment> payments) {
+    return payments
+        .where((p) => p.isRecurring)
+        .fold<double>(0, (sum, p) => sum + monthlyEquivalent(p));
+  }
+
+  /// Igual que [recurringMonthlyTotal] pero anualizado.
+  static double recurringAnnualTotal(List<Payment> payments) {
+    return payments
+        .where((p) => p.isRecurring)
+        .fold<double>(0, (sum, p) => sum + annualEquivalent(p));
+  }
+
+  /// Suma cuánto se pagó realmente (desde el historial, no desde el estado
+  /// actual del Payment) en un período dado, filtrado por moneda. Si [month]
+  /// es nulo, suma todo el año; si se indica, suma solo ese mes.
+  ///
+  /// Esto es lo que hace que las estadísticas de "pagado" sean correctas
+  /// para pagos recurrentes: una vez que un pago se marca como pagado, su
+  /// `dueDate` avanza y su `status` vuelve a pendiente, así que el único
+  /// registro confiable de "esto se pagó, y cuándo" es el historial.
+  static double paidTotal(
+    List<PaymentHistoryEntry> history, {
+    required String currency,
+    required int year,
+    int? month,
+  }) {
+    return history
+        .where((h) =>
+            h.currency == currency &&
+            h.paidAt.year == year &&
+            (month == null || h.paidAt.month == month))
+        .fold<double>(0, (sum, h) => sum + h.amount);
+  }
+
   /// Determina si un pago pendiente debe considerarse vencido "hoy".
   static bool isOverdue(DateTime dueDate, PaymentStatus status) {
     if (status != PaymentStatus.pending) return false;
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    final dueOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
-    return dueOnly.isBefore(todayOnly);
+    return DateFormatter.daysUntil(dueDate) < 0;
   }
 
   /// Color asociado a la urgencia de un vencimiento.
@@ -50,10 +121,7 @@ class PaymentUtils {
     if (isOverdue(dueDate, status) || status == PaymentStatus.overdue) {
       return AppColors.overdue;
     }
-    final diff = DateTime(dueDate.year, dueDate.month, dueDate.day)
-        .difference(DateTime.now())
-        .inDays;
-    if (diff <= 1) return AppColors.dueSoon;
+    if (DateFormatter.daysUntil(dueDate) <= 1) return AppColors.dueSoon;
     return AppColors.dueLater;
   }
 
@@ -73,10 +141,7 @@ class PaymentUtils {
     if (isOverdue(dueDate, status) || status == PaymentStatus.overdue) {
       return '🔴';
     }
-    final diff = DateTime(dueDate.year, dueDate.month, dueDate.day)
-        .difference(DateTime.now())
-        .inDays;
-    if (diff <= 1) return '🟠';
+    if (DateFormatter.daysUntil(dueDate) <= 1) return '🟠';
     return '🟢';
   }
 }

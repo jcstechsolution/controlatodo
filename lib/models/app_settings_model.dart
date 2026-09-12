@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// Configuración del usuario, almacenada en users/{userId}/settings/config.
 class AppSettingsModel {
   final String currency;
@@ -9,6 +11,20 @@ class AppSettingsModel {
     this.notificationsEnabled = true,
     this.themeMode = 'system',
   });
+
+  /// Traduce el string guardado (`system|light|dark`) al `ThemeMode` que
+  /// espera `MaterialApp`. Cualquier valor desconocido cae en `system`,
+  /// igual que hace el resto de los `fromId`/`fromCode` de la app.
+  ThemeMode get themeModeEnum {
+    switch (themeMode) {
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
 
   AppSettingsModel copyWith({
     String? currency,

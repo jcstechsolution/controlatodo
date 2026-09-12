@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/routes.dart';
-import '../../core/constants/payment_enums.dart';
 import '../../core/constants/plan_limits.dart';
 import '../../core/widgets/confirm_dialog.dart';
 import '../../providers/auth_provider.dart';
@@ -98,6 +97,34 @@ class ProfileScreen extends StatelessWidget {
                     title: const Text('Notificaciones'),
                     value: settings.settings.notificationsEnabled,
                     onChanged: settings.updateNotificationsEnabled,
+                  ),
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.brightness_6_outlined),
+                            SizedBox(width: 16),
+                            Text('Tema'),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'light', label: Text('Claro')),
+                            ButtonSegment(value: 'dark', label: Text('Oscuro')),
+                            ButtonSegment(value: 'system', label: Text('Sistema')),
+                          ],
+                          selected: {settings.settings.themeMode},
+                          onSelectionChanged: (selection) {
+                            settings.updateThemeMode(selection.first);
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

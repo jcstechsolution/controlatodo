@@ -7,8 +7,23 @@ service cloud.firestore {
     // información dentro de su propio documento users/{userId}.
     // Nunca se permite el acceso a datos de otro usuario.
     match /users/{userId} {
-      allow read, create, update, delete: if request.auth != null
+      allow read, delete: if request.auth != null
         && request.auth.uid == userId;
+
+      // Al crear la cuenta, el perfil se guarda siempre con plan "free"
+      // (así lo hace AuthRepository.registerWithEmail/_createMissingProfile).
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.plan == 'free';
+
+      // El campo `plan` NUNCA puede modificarse desde el cliente: pasar a
+      // Premium debe hacerlo únicamente una Cloud Function con el Admin SDK
+      // (no sujeta a estas reglas), una vez que exista un cobro real
+      // verificado. El resto del documento (nombre, etc.) sí se puede
+      // actualizar normalmente.
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan']);
 
       // users/{userId}/payments/{paymentId}
       match /payments/{paymentId} {

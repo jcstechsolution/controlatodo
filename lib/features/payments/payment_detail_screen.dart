@@ -65,6 +65,8 @@ class PaymentDetailScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
+            if (payment.provider != null && payment.provider!.isNotEmpty)
+              _DetailRow(label: 'Proveedor', value: payment.provider!),
             _DetailRow(label: 'Categoría', value: payment.categoryEnum.label),
             _DetailRow(label: 'Fecha de vencimiento', value: DateFormatter.toShort(payment.dueDate)),
             _DetailRow(
@@ -72,8 +74,43 @@ class PaymentDetailScreen extends StatelessWidget {
               value: payment.isRecurring ? payment.frequencyEnum.label : 'Una vez',
             ),
             _DetailRow(label: 'Recordatorio', value: ReminderOptionX.fromDays(payment.reminderDays).label),
+            if (payment.invoiceNumber != null && payment.invoiceNumber!.isNotEmpty)
+              _DetailRow(label: 'Número de factura', value: payment.invoiceNumber!),
             if (payment.notes != null && payment.notes!.isNotEmpty)
               _DetailRow(label: 'Notas', value: payment.notes!),
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Próximamente aquí: documento/factura adjunto, variación '
+                      'del monto y promedio histórico de este pago.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.outline,
+                            fontStyle: FontStyle.italic,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
             Text(
               'Historial',
@@ -132,7 +169,7 @@ class PaymentDetailScreen extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: () => context.push(
                 AppRoutes.editPaymentPath(payment!.id),
-                extra: payment!,
+                extra: payment,
               ),
               icon: const Icon(Icons.edit_outlined),
               label: const Text('Editar'),

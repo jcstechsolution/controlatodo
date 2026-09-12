@@ -47,9 +47,25 @@ class PaymentRepository {
         .map((snap) => snap.docs.map(PaymentHistoryEntry.fromSnapshot).toList());
   }
 
+  /// Escucha, en una sola consulta, el historial de TODOS los pagos del
+  /// usuario (usando una consulta `collectionGroup` sobre la subcolección
+  /// `history` de cada pago). Necesario para que las estadísticas de
+  /// "pagado" reflejen la realidad histórica y no solo el estado actual de
+  /// cada `Payment` (que cambia en cuanto un pago recurrente se paga de
+  /// nuevo). Requiere un índice de Firestore para el campo `userId` con
+  /// alcance "Collection group" (ver firestore.indexes.json).
+  Stream<List<PaymentHistoryEntry>> watchAllHistory(String uid) {
+    return _firestore
+        .collectionGroup(FirestorePaths.history)
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((snap) => snap.docs.map(PaymentHistoryEntry.fromSnapshot).toList());
+  }
+
   Future<Payment> createPayment({
     required String uid,
     required String name,
+    String? provider,
     required String category,
     required double amount,
     required String currency,
@@ -58,13 +74,19 @@ class PaymentRepository {
     required String frequency,
     required int reminderDays,
     String? notes,
+    String? invoiceNumber,
+    String? documentUrl,
   }) async {
     try {
       final docRef = _paymentsCollection(uid).doc();
       final now = DateTime.now();
       final payment = Payment(
         id: docRef.id,
+        userId: uid,
         name: name.trim(),
+        provider: (provider == null || provider.trim().isEmpty)
+            ? null
+            : provider.trim(),
         category: category,
         amount: amount,
         currency: currency,
@@ -74,6 +96,10 @@ class PaymentRepository {
         reminderDays: reminderDays,
         status: PaymentStatus.pending.id,
         notes: (notes == null || notes.trim().isEmpty) ? null : notes.trim(),
+        invoiceNumber: (invoiceNumber == null || invoiceNumber.trim().isEmpty)
+            ? null
+            : invoiceNumber.trim(),
+        documentUrl: documentUrl,
         createdAt: now,
         updatedAt: now,
       );
@@ -117,8 +143,17 @@ class PaymentRepository {
       final historyRef = _historyCollection(uid, payment.id).doc();
       final historyEntry = PaymentHistoryEntry(
         id: historyRef.id,
+        paymentId: payment.id,
+        userId: uid,
+        name: payment.name,
+        category: payment.category,
+        provider: payment.provider,
         amount: payment.amount,
         currency: payment.currency,
+        // Fecha de vencimiento del ciclo que se está pagando, ANTES de
+        // avanzarla (si el pago es recurrente) — así el historial siempre
+        // refleja qué ciclo se pagó, no el próximo.
+        dueDate: payment.dueDate,
         paidAt: now,
         status: PaymentStatus.paid.id,
       );
@@ -228,6 +263,7 @@ class PaymentRepository {
         final dueDate = DateTime.now().add(Duration(days: demo['dueDays'] as int));
         final payment = Payment(
           id: docRef.id,
+          userId: uid,
           name: demo['name'] as String,
           category: demo['category'] as String,
           amount: demo['amount'] as double,

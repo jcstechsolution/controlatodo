@@ -39,12 +39,13 @@ class ControlaTodoApp extends StatelessWidget {
         builder: (context) {
           final authProvider = context.read<AuthProvider>();
           final router = buildRouter(authProvider);
+          final themeMode = context.watch<SettingsProvider>().settings.themeModeEnum;
           return MaterialApp.router(
             title: 'ControlaTodo',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
-            themeMode: ThemeMode.system,
+            themeMode: themeMode,
             routerConfig: router,
           );
         },

@@ -34,7 +34,9 @@ class PaymentFormScreen extends StatefulWidget {
 class _PaymentFormScreenState extends State<PaymentFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _providerController = TextEditingController();
   final _amountController = TextEditingController();
+  final _invoiceNumberController = TextEditingController();
   final _notesController = TextEditingController();
 
   late PaymentCategory _category;
@@ -56,9 +58,11 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
     final existing = widget.existingPayment;
     if (existing != null) {
       _nameController.text = existing.name;
+      _providerController.text = existing.provider ?? '';
       _amountController.text = existing.amount.toStringAsFixed(
         existing.currency == 'USD' ? 2 : 0,
       );
+      _invoiceNumberController.text = existing.invoiceNumber ?? '';
       _notesController.text = existing.notes ?? '';
       _category = existing.categoryEnum;
       _currency = AppCurrencyX.fromCode(existing.currency);
@@ -90,7 +94,9 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _providerController.dispose();
     _amountController.dispose();
+    _invoiceNumberController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -128,9 +134,17 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
     final amount = double.parse(_amountController.text.replaceAll(',', '.'));
     bool success;
 
+    final providerText = _providerController.text.trim();
+    final invoiceNumberText = _invoiceNumberController.text.trim();
+
     if (_isEditing) {
       final updated = widget.existingPayment!.copyWith(
         name: _nameController.text.trim(),
+        // `copyWith` no distingue "no cambiar" de "poner en null" para los
+        // campos opcionales (usa `??`), así que para poder borrar un valor
+        // ya guardado hay que reconstruir el Payment en vez de usar copyWith
+        // aquí. Se reusa el resto de copyWith y se sobreescriben estos dos
+        // campos directamente.
         category: _category.id,
         amount: amount,
         currency: _currency.code,
@@ -142,12 +156,33 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
             ? null
             : _notesController.text.trim(),
       );
-      success = await paymentProvider.updatePayment(uid, updated);
+      final withProviderAndInvoice = Payment(
+        id: updated.id,
+        userId: updated.userId,
+        name: updated.name,
+        provider: providerText.isEmpty ? null : providerText,
+        category: updated.category,
+        amount: updated.amount,
+        currency: updated.currency,
+        dueDate: updated.dueDate,
+        isRecurring: updated.isRecurring,
+        frequency: updated.frequency,
+        reminderDays: updated.reminderDays,
+        status: updated.status,
+        notes: updated.notes,
+        invoiceNumber: invoiceNumberText.isEmpty ? null : invoiceNumberText,
+        documentUrl: updated.documentUrl,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+        isDemo: updated.isDemo,
+      );
+      success = await paymentProvider.updatePayment(uid, withProviderAndInvoice);
     } else {
       success = await paymentProvider.addPayment(
         uid: uid,
         isPremium: auth.userModel?.isPremium ?? false,
         name: _nameController.text,
+        provider: providerText.isEmpty ? null : providerText,
         category: _category.id,
         amount: amount,
         currency: _currency.code,
@@ -156,6 +191,7 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
         frequency: _isRecurring ? _frequency.id : PaymentFrequency.unaVez.id,
         reminderDays: _reminder.days,
         notes: _notesController.text,
+        invoiceNumber: invoiceNumberText.isEmpty ? null : invoiceNumberText,
       );
     }
 
@@ -223,6 +259,15 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
                     hintText: 'Ejemplo: Internet',
                   ),
                   validator: Validators.paymentName,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _providerController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Proveedor (opcional)',
+                    hintText: 'Ejemplo: Kölbi, Netflix...',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<PaymentCategory>(
@@ -317,6 +362,14 @@ class _PaymentFormScreenState extends State<PaymentFormScreen> {
                   onChanged: (value) {
                     if (value != null) setState(() => _reminder = value);
                   },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _invoiceNumberController,
+                  decoration: const InputDecoration(
+                    labelText: 'Número de factura (opcional)',
+                    hintText: 'Ejemplo: F-00123',
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(

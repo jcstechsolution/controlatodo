@@ -4,8 +4,7 @@ import '../core/constants/firestore_paths.dart';
 import '../core/utils/app_exception.dart';
 import '../models/app_settings_model.dart';
 
-/// Maneja la lectura/escritura de users/{userId}/settings/config y del
-/// campo `plan` dentro de users/{userId}.
+/// Maneja la lectura/escritura de users/{userId}/settings/config.
 class SettingsRepository {
   final FirebaseFirestore _firestore;
 
@@ -43,14 +42,8 @@ class SettingsRepository {
     }
   }
 
-  Future<void> updatePlan(String uid, String plan) async {
-    try {
-      await _firestore
-          .collection(FirestorePaths.users)
-          .doc(uid)
-          .set({'plan': plan}, SetOptions(merge: true));
-    } catch (_) {
-      throw AppException.generic;
-    }
-  }
+  // Nota: deliberadamente NO existe un `updatePlan` aquí. El campo `plan`
+  // de users/{userId} está bloqueado en firestore.rules para escrituras del
+  // cliente — pasar a Premium debe hacerlo únicamente una Cloud Function
+  // (Admin SDK) una vez que haya un cobro real verificado.
 }

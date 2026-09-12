@@ -57,13 +57,19 @@ class StatisticsScreen extends StatelessWidget {
         .where((p) => p.dueDate.year == now.year)
         .fold<double>(0, (sum, p) => sum + p.amount);
 
-    final pendingCount = payments
+    final pendingPayments = payments
         .where((p) => PaymentUtils.effectiveStatus(p.dueDate, p.statusEnum) == PaymentStatus.pending)
-        .length;
-    final paidCount = payments.where((p) => p.statusEnum == PaymentStatus.paid).length;
-    final overdueCount = payments
+        .toList();
+    final overduePayments = payments
         .where((p) => PaymentUtils.effectiveStatus(p.dueDate, p.statusEnum) == PaymentStatus.overdue)
-        .length;
+        .toList();
+    final pendingCount = pendingPayments.length;
+    final paidCount = payments.where((p) => p.statusEnum == PaymentStatus.paid).length;
+    final overdueCount = overduePayments.length;
+    // Obligaciones pendientes/vencidas en monto (no solo conteo), sobre
+    // TODOS los pagos activos en esta moneda, no solo los de este mes.
+    final pendingTotal = pendingPayments.fold<double>(0, (sum, p) => sum + p.amount);
+    final overdueTotal = overduePayments.fold<double>(0, (sum, p) => sum + p.amount);
 
     final byCategory = <PaymentCategory, double>{};
     for (final p in payments) {
@@ -73,12 +79,22 @@ class StatisticsScreen extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     final recurringCount = paymentProvider.allPayments.where((p) => p.isRecurring).length;
-    final paidThisMonth = payments
-        .where((p) =>
-            p.statusEnum == PaymentStatus.paid &&
-            p.dueDate.year == now.year &&
-            p.dueDate.month == now.month)
-        .fold<double>(0, (sum, p) => sum + p.amount);
+    // "Pagado" real (histórico), no derivado del Payment activo: un pago
+    // recurrente vuelve a "pendiente" en cuanto se paga, así que solo el
+    // historial sabe cuánto se pagó realmente este mes/año.
+    final paidThisMonth = PaymentUtils.paidTotal(
+      paymentProvider.allHistory,
+      currency: currency,
+      year: now.year,
+      month: now.month,
+    );
+    final paidThisYear = PaymentUtils.paidTotal(
+      paymentProvider.allHistory,
+      currency: currency,
+      year: now.year,
+    );
+    final recurringMonthlyTotal = PaymentUtils.recurringMonthlyTotal(payments);
+    final recurringAnnualTotal = PaymentUtils.recurringAnnualTotal(payments);
     final topCategory = sortedCategories.isEmpty ? null : sortedCategories.first.key;
 
     return Scaffold(
@@ -130,6 +146,28 @@ class StatisticsScreen extends StatelessWidget {
                     label: 'Vencidos',
                     value: '$overdueCount',
                     valueColor: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: SummaryCard(
+                    label: 'Obligaciones pendientes',
+                    value: CurrencyFormatter.format(pendingTotal, currency),
+                    valueColor: Theme.of(context).colorScheme.tertiary,
+                    icon: Icons.hourglass_empty_rounded,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SummaryCard(
+                    label: 'Obligaciones vencidas',
+                    value: CurrencyFormatter.format(overdueTotal, currency),
+                    valueColor: Theme.of(context).colorScheme.error,
+                    icon: Icons.error_outline_rounded,
                   ),
                 ),
               ],
@@ -188,6 +226,40 @@ class StatisticsScreen extends StatelessWidget {
               }),
             ],
             const SizedBox(height: 28),
+            Text(
+              'Gastos recurrentes',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              ),
+              child: recurringMonthlyTotal <= 0
+                  ? const Text('No tienes obligaciones recurrentes activas.')
+                  : Text.rich(
+                      TextSpan(
+                        style: Theme.of(context).textTheme.bodyLarge,
+                        children: [
+                          TextSpan(
+                            text: CurrencyFormatter.format(recurringMonthlyTotal, currency),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const TextSpan(text: ' / mes  ≈  '),
+                          TextSpan(
+                            text: CurrencyFormatter.format(recurringAnnualTotal, currency),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const TextSpan(text: ' / año (costo anualizado)'),
+                        ],
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 28),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(18),
@@ -213,6 +285,8 @@ class StatisticsScreen extends StatelessWidget {
                   Text('Tienes $recurringCount pagos recurrentes activos.'),
                   const SizedBox(height: 4),
                   Text('Este mes has pagado ${CurrencyFormatter.format(paidThisMonth, currency)}.'),
+                  const SizedBox(height: 4),
+                  Text('Este año has pagado ${CurrencyFormatter.format(paidThisYear, currency)}.'),
                   if (topCategory != null) ...[
                     const SizedBox(height: 4),
                     Text('Tu categoría con mayor gasto es ${topCategory.label}.'),

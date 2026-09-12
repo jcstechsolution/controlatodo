@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -72,7 +73,18 @@ class DashboardScreen extends StatelessWidget {
     ScanResult? result;
     try {
       result = await OcrService.instance.scanImage(photo.path);
-    } catch (_) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print(
+          '[OCR] texto reconocido (${result.rawText.length} caracteres): '
+          '"${result.rawText}" | nombre=${result.name} | monto=${result.amount}',
+        );
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        // ignore: avoid_print
+        print('[OCR] error al escanear la imagen: $e\n$st');
+      }
       result = null;
     }
 
@@ -198,6 +210,14 @@ class DashboardScreen extends StatelessWidget {
                           },
                         ),
                       ),
+                    const SizedBox(height: 28),
+                    _RecurringObligationsCard(
+                      monthlyTotal: paymentProvider.recurringMonthlyTotalFor(currency),
+                      annualTotal: paymentProvider.recurringAnnualTotalFor(currency),
+                      currency: currency,
+                    ),
+                    const SizedBox(height: 16),
+                    const _InsightsPlaceholderCard(),
                   ],
                 ),
         ),
@@ -235,6 +255,107 @@ class _MonthlyTotalCard extends StatelessWidget {
               color: Colors.white,
               fontSize: 30,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Muestra el total mensualizado y anualizado de las obligaciones
+/// recurrentes activas (ej. "₡98.400 / mes ≈ ₡1.180.800 / año"). Ver
+/// `PaymentUtils.monthlyEquivalent`/`annualEquivalent`.
+class _RecurringObligationsCard extends StatelessWidget {
+  final double monthlyTotal;
+  final double annualTotal;
+  final String currency;
+
+  const _RecurringObligationsCard({
+    required this.monthlyTotal,
+    required this.annualTotal,
+    required this.currency,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.autorenew_rounded, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Obligaciones recurrentes',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (monthlyTotal <= 0)
+            Text(
+              'No tienes obligaciones recurrentes activas todavía.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline),
+            )
+          else
+            Text.rich(
+              TextSpan(
+                style: theme.textTheme.bodyMedium,
+                children: [
+                  TextSpan(
+                    text: CurrencyFormatter.format(monthlyTotal, currency),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const TextSpan(text: ' / mes  ≈  '),
+                  TextSpan(
+                    text: CurrencyFormatter.format(annualTotal, currency),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const TextSpan(text: ' / año'),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Espacio preparado para futuros análisis inteligentes (detección de
+/// aumentos de precio, patrones de gasto, etc.) — sin inventar ningún
+/// insight real todavía, solo el mensaje de que hace falta más historial.
+class _InsightsPlaceholderCard extends StatelessWidget {
+  const _InsightsPlaceholderCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.insights_outlined, size: 18, color: theme.colorScheme.outline),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Cuando tengas más historial podremos detectar cambios en tus gastos.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
             ),
           ),
         ],

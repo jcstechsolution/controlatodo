@@ -6,6 +6,7 @@ import '../utils/date_formatter.dart';
 import '../utils/payment_utils.dart';
 import '../../models/payment_model.dart';
 import 'category_icon.dart';
+import 'payment_status_badge.dart';
 
 /// Tarjeta que representa un pago dentro de una lista (Dashboard, Mis pagos,
 /// Calendario). Muestra el emoji/color de urgencia, nombre, monto y fecha.
@@ -34,6 +35,7 @@ class PaymentCard extends StatelessWidget {
     final emoji = PaymentUtils.urgencyEmoji(payment.dueDate, payment.statusEnum);
     final relative = DateFormatter.relativeLabel(payment.dueDate);
     final amountLabel = CurrencyFormatter.format(payment.amount, payment.currency);
+    final effectiveStatus = PaymentUtils.effectiveStatus(payment.dueDate, payment.statusEnum);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -80,6 +82,14 @@ class PaymentCard extends StatelessWidget {
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (payment.provider != null && payment.provider!.isNotEmpty)
+                        Text(
+                          payment.provider!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.outline,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       Text(
                         payment.categoryEnum.label,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -126,6 +136,8 @@ class PaymentCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    PaymentStatusBadge(status: effectiveStatus),
                     if (onMarkAsPaid != null) ...[
                       const SizedBox(height: 4),
                       TextButton(
