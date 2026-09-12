@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import '../providers/billing_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/settings_provider.dart';
 import 'routes.dart';
@@ -30,6 +31,14 @@ class ControlaTodoApp extends StatelessWidget {
           create: (_) => SettingsProvider(),
           update: (context, auth, previous) {
             final provider = previous ?? SettingsProvider();
+            provider.bind(auth.firebaseUser?.uid);
+            return provider;
+          },
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, BillingProvider>(
+          create: (_) => BillingProvider(),
+          update: (context, auth, previous) {
+            final provider = previous ?? BillingProvider();
             provider.bind(auth.firebaseUser?.uid);
             return provider;
           },

@@ -1,15 +1,18 @@
 /// Límites y precios de los planes de ControlaTodo.
 ///
-/// Por ahora solo se define la estructura de planes y límites.
-/// La integración real de cobros (Google Play Billing / App Store)
-/// se realizará en una fase posterior.
+/// Los precios de aquí son solo el *fallback* que se muestra en la pantalla
+/// Premium mientras la tienda no respondió (o no está disponible, ej. un
+/// emulador sin Play Store) — el precio real y ya localizado siempre viene
+/// de `ProductDetails.price` (ver `BillingProvider`/`premium_screen.dart`).
+/// Cambiar estos números NO cambia lo que de verdad se cobra: eso se define
+/// en Play Console / App Store Connect.
 class PlanLimits {
   PlanLimits._();
 
   static const int freeMaxPayments = 10;
 
-  static const double premiumMonthlyPriceUsd = 2.99;
-  static const double premiumYearlyPriceUsd = 29.99;
+  static const double premiumMonthlyPriceUsd = 3.99;
+  static const double premiumYearlyPriceUsd = 38.99;
 }
 
 enum UserPlan { free, premium }

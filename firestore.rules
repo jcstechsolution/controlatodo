@@ -10,20 +10,27 @@ service cloud.firestore {
       allow read, delete: if request.auth != null
         && request.auth.uid == userId;
 
-      // Al crear la cuenta, el perfil se guarda siempre con plan "free"
-      // (así lo hace AuthRepository.registerWithEmail/_createMissingProfile).
+      // Al crear la cuenta, el perfil se guarda siempre con plan "free" y
+      // sin ningún campo premium* todavía (así lo hace
+      // AuthRepository.registerWithEmail/_createMissingProfile).
       allow create: if request.auth != null
         && request.auth.uid == userId
-        && request.resource.data.plan == 'free';
+        && request.resource.data.plan == 'free'
+        && !request.resource.data.keys().hasAny([
+          'premiumProductId', 'premiumExpiryTime', 'premiumPurchaseToken', 'premiumUpdatedAt'
+        ]);
 
-      // El campo `plan` NUNCA puede modificarse desde el cliente: pasar a
-      // Premium debe hacerlo únicamente una Cloud Function con el Admin SDK
-      // (no sujeta a estas reglas), una vez que exista un cobro real
-      // verificado. El resto del documento (nombre, etc.) sí se puede
-      // actualizar normalmente.
+      // Ni `plan` ni ninguno de los campos premium* pueden modificarse desde
+      // el cliente: activar/renovar/revocar Premium lo hace ÚNICAMENTE la
+      // Cloud Function `verifyPlayPurchase` (o `checkExpiredSubscriptions`)
+      // con el Admin SDK, tras verificar la compra contra Google Play — no
+      // sujetas a estas reglas. El resto del documento (nombre, etc.) sí se
+      // puede actualizar normalmente.
       allow update: if request.auth != null
         && request.auth.uid == userId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['plan']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'plan', 'premiumProductId', 'premiumExpiryTime', 'premiumPurchaseToken', 'premiumUpdatedAt'
+        ]);
 
       // users/{userId}/payments/{paymentId}
       match /payments/{paymentId} {
@@ -44,7 +51,11 @@ service cloud.firestore {
       }
     }
 
-    // Cualquier otra ruta queda denegada por defecto.
+    // Cualquier otra ruta queda denegada por defecto — esto incluye
+    // `processedPurchaseTokens/{token}`, usada solo por las Cloud Functions
+    // de billing (Admin SDK) para evitar que un mismo pago de Play active
+    // Premium en dos cuentas. Nunca agregar aquí una regla de cliente para
+    // esa colección.
     match /{document=**} {
       allow read, write: if false;
     }
